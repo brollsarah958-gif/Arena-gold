@@ -1,463 +1,1201 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Market, Trade, AIAnalysis, MarketPrice, NewsItem, MarketStats, DailySummary } from './types/trading';
-import {
-  updateMarketPrices, getCurrentPrice, generateAIAnalysis,
-  generateTrade, generateHistoricalTrades, calculateStats,
-  generateNews, generateDailySummary
-} from './utils/marketEngine';
-import PriceTicker from './components/PriceTicker';
-import AIAnalysisPanel from './components/AIAnalysisPanel';
-import ActiveTrades from './components/ActiveTrades';
-import Backlog from './components/Backlog';
-import Statistics from './components/Statistics';
-import NewsPanel from './components/NewsPanel';
-import DailySummaryPanel from './components/DailySummaryPanel';
-import TradingViewChart from './components/TradingViewChart';
-import MarketHeader from './components/MarketHeader';
-import {
-  TrendingUp, BarChart2, Archive,
-  Newspaper, Calendar, LayoutDashboard, Brain,
-  ChevronRight, AlertCircle, Info
-} from 'lucide-react';
+<!DOCTYPE html>
 
-type Tab = 'dashboard' | 'analysis' | 'trades' | 'backlog' | 'stats' | 'news' | 'summary';
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>نظام التداول التعليمي</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --gold: #D4AF37;
+      --gold-light: #F0D060;
+      --gold-dim: rgba(212,175,55,0.15);
+      --gold-border: rgba(212,175,55,0.25);
+      --bg: #080808;
+      --bg2: #101010;
+      --bg3: #181818;
+      --text: #F0F0F0;
+      --text-dim: rgba(240,240,240,0.4);
+      --green: #34D399;
+      --red: #F87171;
+      --yellow: #FBBF24;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Cairo', sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    .mono { font-family: 'JetBrains Mono', monospace; }
 
-const TAB_CONFIG = [
-  { id: 'dashboard' as Tab, label: 'الرئيسية', icon: LayoutDashboard },
-  { id: 'analysis' as Tab, label: 'تحليل AI', icon: Brain },
-  { id: 'trades' as Tab, label: 'الصفقات', icon: TrendingUp },
-  { id: 'backlog' as Tab, label: 'السجل', icon: Archive },
-  { id: 'stats' as Tab, label: 'إحصائيات', icon: BarChart2 },
-  { id: 'news' as Tab, label: 'الأخبار', icon: Newspaper },
-  { id: 'summary' as Tab, label: 'الملخص', icon: Calendar },
-];
+```
+/* Background */
+.bg-grid {
+  position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background:
+    radial-gradient(ellipse at top, rgba(212,175,55,0.08) 0%, transparent 60%),
+    radial-gradient(ellipse at bottom right, rgba(212,175,55,0.05) 0%, transparent 50%);
+}
+.bg-grid::after {
+  content: '';
+  position: absolute; inset: 0;
+  background-image:
+    repeating-linear-gradient(0deg, transparent, transparent 50px, rgba(212,175,55,0.04) 50px, rgba(212,175,55,0.04) 51px),
+    repeating-linear-gradient(90deg, transparent, transparent 50px, rgba(212,175,55,0.04) 50px, rgba(212,175,55,0.04) 51px);
+}
 
-const MARKET_FULL_NAMES: Record<Market, string> = {
-  XAUUSD: 'الذهب مقابل الدولار',
-  XAUEUR: 'الذهب مقابل اليورو',
-  BTCUSD: 'البيتكوين مقابل الدولار',
+/* Header */
+header {
+  position: sticky; top: 0; z-index: 50;
+  border-bottom: 1px solid var(--gold-border);
+  backdrop-filter: blur(20px);
+  background: rgba(8,8,8,0.85);
+}
+.header-inner {
+  max-width: 1400px; margin: 0 auto;
+  padding: 12px 20px;
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+}
+.logo { display: flex; align-items: center; gap: 12px; }
+.logo-icon {
+  width: 42px; height: 42px; border-radius: 12px;
+  background: var(--gold-dim); border: 1px solid var(--gold-border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px;
+}
+.logo-text { font-size: 17px; font-weight: 900; color: var(--gold); line-height: 1.1; }
+.logo-sub { font-size: 11px; color: var(--text-dim); }
+.header-prices { display: flex; gap: 20px; align-items: center; }
+.hp-item { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.hp-label { color: var(--text-dim); }
+.hp-val { font-family: 'JetBrains Mono', monospace; font-weight: 700; color: var(--text); }
+.hp-chg.up { color: var(--green); }
+.hp-chg.dn { color: var(--red); }
+.badge-edu {
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(251,191,36,0.1); border: 1px solid rgba(251,191,36,0.3);
+  border-radius: 8px; padding: 5px 10px;
+  font-size: 11px; font-weight: 700; color: var(--yellow);
+}
+.live-dot {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 11px; color: var(--green);
+}
+.pulse {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--green);
+  animation: pulse 1.5s infinite;
+}
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(1.3)} }
+
+/* Disclaimer Banner */
+.disclaimer {
+  margin: 20px auto 0; max-width: 1400px; padding: 0 20px;
+}
+.disclaimer-inner {
+  display: flex; align-items: flex-start; gap: 12px;
+  padding: 14px 18px; border-radius: 12px;
+  border: 1px solid rgba(251,191,36,0.3);
+  background: rgba(251,191,36,0.05);
+  color: rgba(251,191,36,0.85); font-size: 13px; line-height: 1.6;
+}
+.disclaimer-inner svg { flex-shrink: 0; margin-top: 2px; }
+
+/* Main */
+main { max-width: 1400px; margin: 0 auto; padding: 20px; position: relative; z-index: 1; }
+
+/* Price Ticker */
+.price-ticker { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+.ticker-card {
+  flex: 1; min-width: 160px;
+  border: 1px solid var(--gold-border);
+  border-radius: 14px; padding: 14px 18px;
+  background: var(--bg2);
+  cursor: pointer; transition: all 0.2s;
+  position: relative; overflow: hidden;
+}
+.ticker-card::before {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(135deg, var(--gold-dim) 0%, transparent 60%);
+  opacity: 0; transition: opacity 0.2s;
+}
+.ticker-card:hover::before, .ticker-card.active::before { opacity: 1; }
+.ticker-card.active { border-color: var(--gold); box-shadow: 0 0 20px rgba(212,175,55,0.15); }
+.ticker-market { font-size: 11px; color: var(--text-dim); margin-bottom: 4px; }
+.ticker-price { font-family: 'JetBrains Mono', monospace; font-size: 20px; font-weight: 700; color: var(--gold); }
+.ticker-change { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-size: 12px; }
+.ticker-name { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+.up { color: var(--green); }
+.dn { color: var(--red); }
+
+/* Tabs */
+.tabs { display: flex; gap: 6px; margin-bottom: 20px; overflow-x: auto; padding-bottom: 4px; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab-btn {
+  display: flex; align-items: center; gap: 7px;
+  padding: 9px 16px; border-radius: 10px;
+  font-size: 13px; font-weight: 700; white-space: nowrap;
+  cursor: pointer; border: none; transition: all 0.2s;
+  font-family: 'Cairo', sans-serif;
+}
+.tab-btn.inactive {
+  background: rgba(255,255,255,0.05);
+  color: rgba(255,255,255,0.55);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+.tab-btn.inactive:hover { background: rgba(255,255,255,0.1); color: #fff; }
+.tab-btn.active { background: var(--gold); color: #000; box-shadow: 0 4px 20px rgba(212,175,55,0.3); }
+.badge-count {
+  background: var(--red); color: #fff;
+  font-size: 10px; padding: 2px 6px; border-radius: 999px; font-weight: 700;
+}
+
+/* Glass Card */
+.glass-card {
+  background: var(--bg2);
+  border: 1px solid var(--gold-border);
+  border-radius: 14px;
+}
+.card-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(212,175,55,0.08);
+}
+.card-title { font-weight: 700; font-size: 14px; }
+.card-body { padding: 16px; }
+
+/* Dashboard Grid */
+.dashboard-grid { display: grid; grid-template-columns: 1fr 360px; gap: 20px; }
+@media (max-width: 1024px) { .dashboard-grid { grid-template-columns: 1fr; } }
+
+/* Chart placeholder (TradingView widget) */
+.chart-wrap {
+  border-radius: 14px; overflow: hidden;
+  border: 1px solid var(--gold-border);
+  margin-bottom: 16px;
+}
+.chart-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px; border-bottom: 1px solid rgba(212,175,55,0.08);
+  background: var(--bg2);
+}
+
+/* TradingView iframe */
+iframe { display: block; width: 100%; border: 0; }
+
+/* Market Header */
+.market-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 14px; padding: 12px 16px;
+  background: var(--bg2); border: 1px solid var(--gold-border); border-radius: 12px;
+}
+.mh-name { font-size: 18px; font-weight: 900; }
+.mh-signal {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 12px; border-radius: 8px; font-size: 12px; font-weight: 700;
+}
+.sig-buy { background: rgba(52,211,153,0.15); color: var(--green); border: 1px solid rgba(52,211,153,0.3); }
+.sig-sell { background: rgba(248,113,113,0.15); color: var(--red); border: 1px solid rgba(248,113,113,0.3); }
+.sig-neutral { background: rgba(251,191,36,0.15); color: var(--yellow); border: 1px solid rgba(251,191,36,0.3); }
+
+/* AI Analysis */
+.ai-panel { display: flex; flex-direction: column; gap: 12px; }
+.ai-signal-big {
+  text-align: center; padding: 16px;
+  border-radius: 12px; font-size: 22px; font-weight: 900;
+}
+.ai-signal-big.buy { background: rgba(52,211,153,0.12); color: var(--green); border: 1px solid rgba(52,211,153,0.25); }
+.ai-signal-big.sell { background: rgba(248,113,113,0.12); color: var(--red); border: 1px solid rgba(248,113,113,0.25); }
+.ai-signal-big.neutral { background: rgba(251,191,36,0.12); color: var(--yellow); border: 1px solid rgba(251,191,36,0.25); }
+.conf-bar-wrap { margin-top: 6px; }
+.conf-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-dim); margin-bottom: 6px; }
+.conf-bar { height: 6px; border-radius: 999px; background: rgba(255,255,255,0.1); overflow: hidden; }
+.conf-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--gold), var(--gold-light)); transition: width 0.5s; }
+.levels-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.level-box {
+  padding: 10px 12px; border-radius: 10px; text-align: center;
+  background: var(--bg3); border: 1px solid rgba(255,255,255,0.07);
+}
+.level-lbl { font-size: 10px; color: var(--text-dim); margin-bottom: 3px; }
+.level-val { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; }
+.level-box.tp .level-val { color: var(--green); }
+.level-box.sl .level-val { color: var(--red); }
+.level-box.entry .level-val { color: var(--gold); }
+.level-box.rr .level-val { color: var(--yellow); }
+.analysis-text {
+  font-size: 12px; line-height: 1.7; color: rgba(255,255,255,0.7);
+  padding: 12px; background: var(--bg3); border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+.indicator-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 12px; }
+.indicator-row:last-child { border: 0; }
+.ind-name { color: var(--text-dim); }
+.ind-val { font-family: 'JetBrains Mono', monospace; font-weight: 700; }
+
+/* Active Trades */
+.trade-card {
+  padding: 14px; border-radius: 12px; margin-bottom: 10px;
+  background: var(--bg3); border: 1px solid rgba(255,255,255,0.07);
+  position: relative;
+}
+.trade-card.buy-trade { border-right: 3px solid var(--green); }
+.trade-card.sell-trade { border-right: 3px solid var(--red); }
+.trade-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.trade-dir { font-weight: 700; font-size: 13px; }
+.trade-dir.buy { color: var(--green); }
+.trade-dir.sell { color: var(--red); }
+.trade-market { font-size: 11px; color: var(--text-dim); }
+.trade-pnl { font-family: 'JetBrains Mono', monospace; font-size: 15px; font-weight: 700; }
+.progress-bar { height: 4px; border-radius: 999px; background: rgba(255,255,255,0.08); margin-top: 8px; overflow: hidden; }
+.progress-fill { height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--green), #6EE7B7); }
+.trade-levels { display: flex; gap: 12px; margin-top: 8px; font-size: 11px; }
+.tl-item { display: flex; flex-direction: column; gap: 2px; }
+.tl-label { color: var(--text-dim); }
+.tl-val { font-family: 'JetBrains Mono', monospace; font-weight: 700; }
+
+/* Backlog */
+.backlog-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.backlog-table th { padding: 10px 12px; text-align: right; color: var(--text-dim); font-weight: 600; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.backlog-table td { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.04); }
+.backlog-table tr:hover td { background: rgba(255,255,255,0.02); }
+.status-win { color: var(--green); font-weight: 700; }
+.status-loss { color: var(--red); font-weight: 700; }
+.status-active { color: var(--yellow); font-weight: 700; }
+
+/* Statistics */
+.stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.stat-card {
+  padding: 16px; border-radius: 12px; text-align: center;
+  background: var(--bg3); border: 1px solid rgba(255,255,255,0.07);
+}
+.stat-val { font-family: 'JetBrains Mono', monospace; font-size: 24px; font-weight: 700; color: var(--gold); }
+.stat-lbl { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+
+/* News */
+.news-card {
+  padding: 16px; border-radius: 12px; margin-bottom: 10px;
+  background: var(--bg3); border: 1px solid rgba(255,255,255,0.07);
+}
+.news-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.news-impact {
+  font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 5px;
+}
+.impact-high { background: rgba(248,113,113,0.15); color: var(--red); border: 1px solid rgba(248,113,113,0.3); }
+.impact-med { background: rgba(251,191,36,0.15); color: var(--yellow); border: 1px solid rgba(251,191,36,0.3); }
+.impact-low { background: rgba(52,211,153,0.15); color: var(--green); border: 1px solid rgba(52,211,153,0.3); }
+.news-time { font-size: 11px; color: var(--text-dim); font-family: 'JetBrains Mono', monospace; }
+.news-title { font-weight: 700; font-size: 14px; margin-bottom: 6px; }
+.news-body { font-size: 12px; color: rgba(255,255,255,0.6); line-height: 1.6; }
+
+/* Daily Summary */
+.summary-section { margin-bottom: 16px; }
+.summary-section h4 { font-size: 13px; font-weight: 700; color: var(--gold); margin-bottom: 10px; }
+.summary-key-val { display: flex; justify-content: space-between; padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 12px; }
+.summary-key { color: var(--text-dim); }
+.summary-val { font-family: 'JetBrains Mono', monospace; font-weight: 700; }
+
+/* Notifications */
+#notifications {
+  position: fixed; top: 80px; left: 16px; z-index: 100;
+  display: flex; flex-direction: column; gap: 8px;
+  max-width: 280px;
+}
+.notif {
+  padding: 10px 14px; border-radius: 10px;
+  font-size: 13px; font-weight: 700;
+  backdrop-filter: blur(16px);
+  animation: slideIn 0.3s ease;
+  cursor: pointer;
+}
+.notif.buy { background: rgba(52,211,153,0.2); border: 1px solid rgba(52,211,153,0.5); color: var(--green); }
+.notif.sell { background: rgba(248,113,113,0.2); border: 1px solid rgba(248,113,113,0.5); color: var(--red); }
+.notif.win { background: rgba(52,211,153,0.3); border: 1px solid rgba(52,211,153,0.5); color: var(--green); }
+.notif.loss { background: rgba(248,113,113,0.3); border: 1px solid rgba(248,113,113,0.5); color: var(--red); }
+@keyframes slideIn { from { opacity:0; transform: translateX(-20px); } to { opacity:1; transform: translateX(0); } }
+
+/* Tabs content */
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* Breadcrumb */
+.breadcrumb { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.bc-right { font-size: 18px; font-weight: 900; }
+.bc-left { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-dim); }
+
+footer {
+  border-top: 1px solid rgba(212,175,55,0.1);
+  padding: 20px; text-align: center;
+  font-size: 11px; color: rgba(255,255,255,0.18);
+  margin-top: 40px;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--gold-border); border-radius: 999px; }
+
+/* Section title */
+.section-title {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 14px; font-weight: 700; color: var(--gold); margin-bottom: 14px;
+}
+.section-title::after {
+  content: ''; flex: 1; height: 1px; background: var(--gold-border);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .header-prices { display: none; }
+  .dashboard-grid { grid-template-columns: 1fr; }
+}
+
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 768px) { .two-col { grid-template-columns: 1fr; } }
+
+.empty-state {
+  text-align: center; padding: 40px 20px;
+  color: var(--text-dim); font-size: 14px;
+}
+.empty-state svg { margin: 0 auto 12px; display: block; opacity: 0.3; }
+
+/* Shimmer on active ticker */
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+```
+
+  </style>
+</head>
+<body>
+
+<div class="bg-grid"></div>
+
+<!-- Header -->
+
+<header>
+  <div class="header-inner">
+    <div class="logo">
+      <div class="logo-icon">⚡</div>
+      <div>
+        <div class="logo-text">نظام التداول التعليمي</div>
+        <div class="logo-sub">للأغراض التعليمية فقط</div>
+      </div>
+    </div>
+    <div class="header-prices" id="headerPrices"></div>
+    <div style="display:flex;align-items:center;gap:10px">
+      <div class="badge-edu">
+        <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        تعليمي فقط
+      </div>
+      <div class="live-dot">
+        <span class="pulse"></span>
+        مباشر
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- Notifications -->
+
+<div id="notifications"></div>
+
+<!-- Main -->
+
+<main>
+
+  <!-- Disclaimer -->
+
+  <div class="disclaimer-inner" style="margin-bottom:20px;border-radius:12px;border:1px solid rgba(251,191,36,0.3);background:rgba(251,191,36,0.05);padding:14px 18px;display:flex;align-items:flex-start;gap:12px;color:rgba(251,191,36,0.85);font-size:13px;line-height:1.6;">
+    <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="flex-shrink:0;margin-top:2px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <p><strong>تنبيه مهم:</strong> جميع الصفقات والتحليلات المعروضة هي للأغراض التعليمية فقط ولا تُعدّ توصيات مالية. لا تتداول بأموال حقيقية بناءً على هذا النظام. تداول العملات والذهب والعملات الرقمية ينطوي على مخاطر عالية.</p>
+  </div>
+
+  <!-- Price Ticker -->
+
+  <div class="price-ticker" id="priceTicker"></div>
+
+  <!-- Breadcrumb -->
+
+  <div class="breadcrumb">
+    <div class="bc-left">
+      <span class="pulse" style="width:6px;height:6px;border-radius:50%;background:var(--green);display:inline-block;"></span>
+      <span id="allActiveCount">0</span> صفقة نشطة
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></svg>
+      <span id="marketActiveCount">0</span> في <span id="activeMarketLabel">XAUUSD</span>
+    </div>
+    <div class="bc-right" id="marketFullName">الذهب مقابل الدولار</div>
+  </div>
+
+  <!-- Tabs -->
+
+  <div class="tabs" id="tabBar"></div>
+
+  <!-- Tab Contents -->
+
+  <!-- Dashboard -->
+
+  <div class="tab-content active" id="tab-dashboard">
+    <div class="dashboard-grid">
+      <div>
+        <div class="market-header" id="mh-dashboard"></div>
+        <div class="chart-wrap" style="margin-bottom:16px">
+          <div class="chart-bar">
+            <div style="display:flex;gap:12px;align-items:center">
+              <span class="mono" id="chartPrice" style="color:var(--gold);font-weight:700">--</span>
+              <span id="chartChange" class="mono" style="font-size:12px"></span>
+            </div>
+            <span style="font-weight:700;font-size:13px" id="chartLabel">XAUUSD — الشارت المباشر (TradingView)</span>
+          </div>
+          <div id="tvWidget" style="height:480px;background:#0d0d0d"></div>
+        </div>
+        <div id="activeTradesDashboard"></div>
+      </div>
+      <div id="aiPanelDashboard"></div>
+    </div>
+  </div>
+
+  <!-- Analysis -->
+
+  <div class="tab-content" id="tab-analysis">
+    <div class="two-col">
+      <div>
+        <div class="market-header" id="mh-analysis"></div>
+        <div class="chart-wrap" style="margin-bottom:16px">
+          <div id="tvWidget2" style="height:400px;background:#0d0d0d"></div>
+        </div>
+        <div id="dailySummaryAnalysis"></div>
+      </div>
+      <div id="aiPanelAnalysis"></div>
+    </div>
+  </div>
+
+  <!-- Trades -->
+
+  <div class="tab-content" id="tab-trades">
+    <div style="display:grid;grid-template-columns:3fr 2fr;gap:20px">
+      <div>
+        <div class="market-header" id="mh-trades"></div>
+        <div class="chart-wrap">
+          <div id="tvWidget3" style="height:350px;background:#0d0d0d"></div>
+        </div>
+      </div>
+      <div id="activeTradesTrades"></div>
+    </div>
+  </div>
+
+  <!-- Backlog -->
+
+  <div class="tab-content" id="tab-backlog">
+    <div id="backlogPanel"></div>
+  </div>
+
+  <!-- Stats -->
+
+  <div class="tab-content" id="tab-stats">
+    <div id="statsPanel"></div>
+  </div>
+
+  <!-- News -->
+
+  <div class="tab-content" id="tab-news">
+    <div style="max-width:720px;margin:0 auto" id="newsPanel"></div>
+  </div>
+
+  <!-- Summary -->
+
+  <div class="tab-content" id="tab-summary">
+    <div style="max-width:720px;margin:0 auto" id="summaryPanel"></div>
+  </div>
+
+</main>
+
+<footer>
+  جميع البيانات تعليمية — لا تُمثّل توصيات مالية | النظام التعليمي © 2025
+</footer>
+
+<script>
+// ========================
+// DATA ENGINE
+// ========================
+const MARKETS = ['XAUUSD', 'XAUEUR', 'BTCUSD'];
+const MARKET_NAMES = { XAUUSD: 'الذهب مقابل الدولار', XAUEUR: 'الذهب مقابل اليورو', BTCUSD: 'البيتكوين مقابل الدولار' };
+const BASE_PRICES = { XAUUSD: 2320, XAUEUR: 2150, BTCUSD: 68000 };
+
+let state = {
+  activeMarket: 'XAUUSD',
+  activeTab: 'dashboard',
+  prices: {},
+  analyses: {},
+  activeTrades: [],
+  allTrades: [],
+  lastTradeTime: {},
+  notifications: []
 };
 
-export default function App() {
-  const [activeMarket, setActiveMarket] = useState<Market>('XAUUSD');
-  const [activeTab, setActiveTab] = useState<Tab>('dashboard');
-  const [prices, setPrices] = useState<Record<string, MarketPrice>>({});
-  const [analyses, setAnalyses] = useState<Partial<Record<Market, AIAnalysis>>>({});
-  const [activeTrades, setActiveTrades] = useState<Trade[]>([]);
-  const [backlogTrades] = useState<Trade[]>(() => generateHistoricalTrades());
-  const [allTrades, setAllTrades] = useState<Trade[]>([]);
-  const [news] = useState<NewsItem[]>(() => generateNews());
-  const [stats, setStats] = useState<Partial<Record<Market, MarketStats>>>({});
-  const [dailySummaries, setDailySummaries] = useState<Partial<Record<Market, DailySummary>>>({});
-  const [lastTradeTime, setLastTradeTime] = useState<Record<string, number>>({});
-  const [notifications, setNotifications] = useState<{ id: string; msg: string; type: 'buy' | 'sell' | 'win' | 'loss' }[]>([]);
-  const [currentPriceMap, setCurrentPriceMap] = useState<Record<string, number>>({});
-  const [isLoading, setIsLoading] = useState(true);
+function rand(min, max) { return Math.random() * (max - min) + min; }
+function randInt(min, max) { return Math.floor(rand(min, max)); }
+function pick(arr) { return arr[randInt(0, arr.length)]; }
 
-
-  const addNotification = useCallback((msg: string, type: 'buy' | 'sell' | 'win' | 'loss') => {
-    const id = Date.now().toString();
-    setNotifications(prev => [{ id, msg, type }, ...prev.slice(0, 4)]);
-    setTimeout(() => setNotifications(prev => prev.filter(n => n.id !== id)), 5000);
-  }, []);
-
-  // Initialize
-  useEffect(() => {
-    const markets: Market[] = ['XAUUSD', 'XAUEUR', 'BTCUSD'];
-
-    // Init prices
-    const initPrices = updateMarketPrices();
-    setPrices(initPrices);
-
-    const priceMap: Record<string, number> = {};
-    markets.forEach(m => { priceMap[m] = initPrices[m].price; });
-    setCurrentPriceMap(priceMap);
-
-    // Init analyses
-    const initAnalyses: Partial<Record<Market, AIAnalysis>> = {};
-    markets.forEach(m => {
-      initAnalyses[m] = generateAIAnalysis(m, initPrices[m].price);
-    });
-    setAnalyses(initAnalyses);
-
-    // Init stats
-    const allT = backlogTrades;
-    setAllTrades(allT);
-    const initStats: Partial<Record<Market, MarketStats>> = {};
-    markets.forEach(m => { initStats[m] = calculateStats(allT, m); });
-    setStats(initStats);
-
-    // Init daily summaries
-    const initSummaries: Partial<Record<Market, DailySummary>> = {};
-    markets.forEach(m => {
-      initSummaries[m] = generateDailySummary(m, initPrices[m].price, initAnalyses[m]!);
-    });
-    setDailySummaries(initSummaries);
-
-    setIsLoading(false);
-  }, [backlogTrades]);
-
-  // Price update loop (every 2s)
-  useEffect(() => {
-    const timer = setInterval(() => {
-      const newPrices = updateMarketPrices();
-      setPrices(newPrices);
-
-      const pm: Record<string, number> = {};
-      (['XAUUSD', 'XAUEUR', 'BTCUSD'] as Market[]).forEach(m => { pm[m] = newPrices[m].price; });
-      setCurrentPriceMap(pm);
-
-      // Check active trade status (hit SL or TP)
-      setActiveTrades(prev => {
-        const updated: Trade[] = [];
-        const closed: Trade[] = [];
-
-        prev.forEach(trade => {
-          const currentPrice = newPrices[trade.market]?.price || trade.entryPrice;
-          let newStatus = trade.status;
-
-          if (trade.direction === 'BUY') {
-            if (currentPrice >= trade.takeProfit) newStatus = 'WIN';
-            else if (currentPrice <= trade.stopLoss) newStatus = 'LOSS';
-          } else {
-            if (currentPrice <= trade.takeProfit) newStatus = 'WIN';
-            else if (currentPrice >= trade.stopLoss) newStatus = 'LOSS';
-          }
-
-          if (newStatus !== 'ACTIVE') {
-            const pnlPips = newStatus === 'WIN'
-              ? Math.abs(trade.takeProfit - trade.entryPrice)
-              : -Math.abs(trade.entryPrice - trade.stopLoss);
-            closed.push({ ...trade, status: newStatus, closeTime: new Date().toISOString(), pnl: pnlPips, pnlPips });
-            addNotification(
-              `${trade.market} ${trade.direction === 'BUY' ? 'شراء' : 'بيع'} — ${newStatus === 'WIN' ? '✅ هدف محقق' : '❌ وقف ضُرب'}`,
-              newStatus === 'WIN' ? 'win' : 'loss'
-            );
-          } else {
-            updated.push(trade);
-          }
-        });
-
-        if (closed.length > 0) {
-          setAllTrades(prevAll => [...closed, ...prevAll]);
-        }
-
-        return updated;
-      });
-    }, 2000);
-
-    return () => clearInterval(timer);
-  }, [addNotification]);
-
-  // AI Analysis update loop (every 15s)
-  useEffect(() => {
-    const timer = setInterval(() => {
-      const markets: Market[] = ['XAUUSD', 'XAUEUR', 'BTCUSD'];
-      const newAnalyses: Partial<Record<Market, AIAnalysis>> = {};
-
-      markets.forEach(m => {
-        const price = getCurrentPrice(m);
-        newAnalyses[m] = generateAIAnalysis(m, price);
-      });
-
-      setAnalyses(newAnalyses);
-
-      // Update daily summaries
-      const newSummaries: Partial<Record<Market, DailySummary>> = {};
-      markets.forEach(m => {
-        newSummaries[m] = generateDailySummary(m, getCurrentPrice(m), newAnalyses[m]!);
-      });
-      setDailySummaries(newSummaries);
-
-      // Try to generate new trades
-      markets.forEach(m => {
-        const lastTime = lastTradeTime[m] || 0;
-        const now = Date.now();
-        const minInterval = 30000; // 30s min between trades per market
-
-        if (now - lastTime > minInterval) {
-          const analysis = newAnalyses[m];
-          if (analysis) {
-            const newTrade = generateTrade(m, analysis, getCurrentPrice(m));
-            if (newTrade) {
-              setActiveTrades(prev => {
-                // Don't add if already has active trade for this market
-                if (prev.some(t => t.market === m && t.status === 'ACTIVE')) return prev;
-                addNotification(
-                  `🎯 صفقة ${newTrade.direction === 'BUY' ? 'شراء' : 'بيع'} جديدة — ${m}`,
-                  newTrade.direction === 'BUY' ? 'buy' : 'sell'
-                );
-                return [...prev, newTrade];
-              });
-              setLastTradeTime(prev => ({ ...prev, [m]: now }));
-            }
-          }
-        }
-      });
-    }, 15000);
-
-    return () => clearInterval(timer);
-  }, [lastTradeTime, addNotification]);
-
-  // Update stats when trades change
-  useEffect(() => {
-    if (allTrades.length === 0) return;
-    const markets: Market[] = ['XAUUSD', 'XAUEUR', 'BTCUSD'];
-    const newStats: Partial<Record<Market, MarketStats>> = {};
-    markets.forEach(m => { newStats[m] = calculateStats(allTrades, m); });
-    setStats(newStats);
-  }, [allTrades]);
-
-  const currentAnalysis = analyses[activeMarket];
-  const currentStats = stats[activeMarket];
-  const currentSummary = dailySummaries[activeMarket];
-  const currentPrice = prices[activeMarket];
-  const totalActiveTrades = activeTrades.filter(t => t.market === activeMarket).length;
-  const allActiveTrades = activeTrades.length;
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-16 h-16 border-4 border-gold border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-gold text-xl font-bold">جارٍ تحميل النظام التعليمي...</p>
-          <p className="text-white/40 text-sm mt-2">تحليل البيانات وإعداد الأسواق</p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-black text-white font-cairo" dir="rtl">
-      {/* Background Pattern */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(212,175,55,0.08)_0%,transparent_60%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom-right,rgba(212,175,55,0.05)_0%,transparent_50%)]" />
-        <div className="absolute inset-0 opacity-[0.03]" style={{
-          backgroundImage: `repeating-linear-gradient(0deg, transparent, transparent 50px, rgba(212,175,55,0.5) 50px, rgba(212,175,55,0.5) 51px),
-          repeating-linear-gradient(90deg, transparent, transparent 50px, rgba(212,175,55,0.5) 50px, rgba(212,175,55,0.5) 51px)`
-        }} />
-      </div>
-
-      {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-gold/20 backdrop-blur-xl bg-black/80">
-        <div className="max-w-screen-2xl mx-auto px-4 py-3">
-          <div className="flex items-center justify-between">
-            {/* Logo */}
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gold/20 border border-gold/40 flex items-center justify-center">
-                <span className="text-gold text-xl">⚡</span>
-              </div>
-              <div>
-                <div className="text-gold font-black text-lg leading-none">نظام التداول التعليمي</div>
-                <div className="text-white/30 text-xs">للأغراض التعليمية فقط</div>
-              </div>
-            </div>
-
-            {/* Live Prices Mini */}
-            <div className="hidden md:flex items-center gap-4">
-              {(['XAUUSD', 'XAUEUR', 'BTCUSD'] as Market[]).map(m => {
-                const p = prices[m];
-                if (!p) return null;
-                const pos = p.change >= 0;
-                return (
-                  <div key={m} className="flex items-center gap-2 text-xs">
-                    <span className="text-white/40">{m}</span>
-                    <span className="text-white font-mono font-bold">
-                      {m === 'BTCUSD' ? p.price.toLocaleString('en-US', { maximumFractionDigits: 0 }) : p.price.toFixed(2)}
-                    </span>
-                    <span className={pos ? 'text-emerald-400' : 'text-red-400'}>
-                      {pos ? '▲' : '▼'} {Math.abs(p.changePercent).toFixed(3)}%
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Disclaimer */}
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 bg-yellow-400/10 border border-yellow-400/30 rounded-lg px-3 py-1.5">
-                <AlertCircle size={12} className="text-yellow-400" />
-                <span className="text-yellow-400 text-xs font-bold">تعليمي فقط</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
-                <span className="text-emerald-400 text-xs">مباشر</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* Notifications */}
-      <div className="fixed top-20 left-4 z-50 space-y-2 max-w-xs">
-        {notifications.map(n => (
-          <div key={n.id} className={`rounded-xl p-3 border text-sm font-bold shadow-xl animate-slide-in backdrop-blur-xl
-            ${n.type === 'buy' ? 'bg-emerald-400/20 border-emerald-400/50 text-emerald-400' :
-              n.type === 'sell' ? 'bg-red-400/20 border-red-400/50 text-red-400' :
-              n.type === 'win' ? 'bg-emerald-900/80 border-emerald-400/50 text-emerald-400' :
-              'bg-red-900/80 border-red-400/50 text-red-400'}`}>
-            {n.msg}
-          </div>
-        ))}
-      </div>
-
-      {/* Main Layout */}
-      <div className="max-w-screen-2xl mx-auto px-4 py-6">
-
-        {/* Disclaimer Banner */}
-        <div className="mb-6 p-4 rounded-xl border border-yellow-400/30 bg-yellow-400/5 flex items-center gap-3">
-          <Info size={18} className="text-yellow-400 flex-shrink-0" />
-          <p className="text-yellow-400/90 text-sm text-right">
-            <strong>تنبيه مهم:</strong> جميع الصفقات والتحليلات المعروضة هي للأغراض التعليمية فقط ولا تُعدّ توصيات مالية.
-            لا تتداول بأموال حقيقية بناءً على هذا النظام. تداول العملات والذهب والعملات الرقمية ينطوي على مخاطر عالية.
-          </p>
-        </div>
-
-        {/* Price Ticker */}
-        <PriceTicker
-          prices={prices}
-          activeMarket={activeMarket}
-          onMarketChange={setActiveMarket}
-        />
-
-        {/* Market Title */}
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2 text-white/40 text-sm">
-            <span className="flex items-center gap-1">
-              <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-pulse" />
-              {allActiveTrades} صفقة نشطة
-            </span>
-            <ChevronRight size={14} />
-            <span>{totalActiveTrades} في {activeMarket}</span>
-          </div>
-          <h2 className="text-white font-bold text-xl">{MARKET_FULL_NAMES[activeMarket]}</h2>
-        </div>
-
-        {/* Tab Navigation */}
-        <div className="flex items-center gap-1 mb-6 overflow-x-auto pb-2 scrollbar-none">
-          {TAB_CONFIG.map(tab => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition-all duration-200
-                  ${isActive
-                    ? 'bg-gold text-black shadow-lg shadow-gold/30'
-                    : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white border border-white/10'}`}
-              >
-                <Icon size={14} />
-                {tab.label}
-                {tab.id === 'trades' && totalActiveTrades > 0 && (
-                  <span className="bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full font-bold">
-                    {totalActiveTrades}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Tab Content */}
-        {activeTab === 'dashboard' && (
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-            {/* Chart - Large */}
-            <div className="xl:col-span-2">
-              <MarketHeader market={activeMarket} price={currentPrice} analysis={currentAnalysis} />
-              <div className="glass-card rounded-xl border border-gold/20 overflow-hidden mb-6">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-gold/10">
-                  <div className="flex items-center gap-2 text-white/40 text-xs">
-                    <span className="text-gold font-mono font-bold">
-                      {currentPrice ? (activeMarket === 'BTCUSD' ? currentPrice.price.toLocaleString('en-US', { maximumFractionDigits: 0 }) : currentPrice.price.toFixed(2)) : '--'}
-                    </span>
-                    {currentPrice && (
-                      <span className={currentPrice.change >= 0 ? 'text-emerald-400' : 'text-red-400'}>
-                        {currentPrice.change >= 0 ? '+' : ''}{currentPrice.change.toFixed(2)}
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-white font-bold">{activeMarket} — الشارت المباشر (TradingView)</span>
-                </div>
-                <TradingViewChart market={activeMarket} height={480} />
-              </div>
-
-              {/* Quick Active Trades */}
-              <ActiveTrades
-                trades={activeTrades}
-                currentPrices={currentPriceMap}
-                market={activeMarket}
-              />
-            </div>
-
-            {/* Right Sidebar */}
-            <div className="space-y-4">
-              {currentAnalysis && <AIAnalysisPanel analysis={currentAnalysis} />}
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'analysis' && (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            <div>
-              <MarketHeader market={activeMarket} price={currentPrice} analysis={currentAnalysis} />
-              <div className="glass-card rounded-xl border border-gold/20 overflow-hidden mb-4">
-                <TradingViewChart market={activeMarket} height={400} />
-              </div>
-              {currentSummary && <DailySummaryPanel summary={currentSummary} />}
-            </div>
-            <div>
-              {currentAnalysis && <AIAnalysisPanel analysis={currentAnalysis} />}
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'trades' && (
-          <div className="grid grid-cols-1 xl:grid-cols-5 gap-6">
-            <div className="xl:col-span-3">
-              <MarketHeader market={activeMarket} price={currentPrice} analysis={currentAnalysis} />
-              <div className="glass-card rounded-xl border border-gold/20 overflow-hidden mb-4">
-                <TradingViewChart market={activeMarket} height={350} />
-              </div>
-            </div>
-            <div className="xl:col-span-2">
-              <ActiveTrades
-                trades={activeTrades}
-                currentPrices={currentPriceMap}
-                market={activeMarket}
-              />
-            </div>
-          </div>
-        )}
-
-        {activeTab === 'backlog' && (
-          <Backlog trades={allTrades.filter(t => t.status !== 'ACTIVE').concat(backlogTrades)} market={activeMarket} />
-        )}
-
-        {activeTab === 'stats' && currentStats && (
-          <Statistics stats={currentStats} backlogTrades={allTrades.concat(backlogTrades)} market={activeMarket} />
-        )}
-
-        {activeTab === 'news' && (
-          <div className="max-w-3xl mx-auto">
-            <NewsPanel news={news} />
-          </div>
-        )}
-
-        {activeTab === 'summary' && currentSummary && (
-          <div className="max-w-3xl mx-auto">
-            <DailySummaryPanel summary={currentSummary} />
-          </div>
-        )}
-      </div>
-
-      {/* Footer */}
-      <footer className="border-t border-gold/10 mt-12 py-6 text-center">
-        <p className="text-white/20 text-xs">
-          جميع البيانات تعليمية — لا تُمثّل توصيات مالية | النظام التعليمي © 2025
-        </p>
-      </footer>
-    </div>
-  );
+function fmt(market, price) {
+  return market === 'BTCUSD' ? price.toLocaleString('en-US', {maximumFractionDigits: 0}) : price.toFixed(2);
 }
+
+// Simulated price state
+let currentPrices = { ...BASE_PRICES };
+
+function updatePrices() {
+  MARKETS.forEach(m => {
+    const base = BASE_PRICES[m];
+    const volatility = m === 'BTCUSD' ? 0.003 : 0.0008;
+    const change = currentPrices[m] * volatility * (Math.random() - 0.48);
+    currentPrices[m] = Math.max(base * 0.85, Math.min(base * 1.15, currentPrices[m] + change));
+
+    const prevPrice = state.prices[m]?.price || base;
+    const dailyChange = currentPrices[m] - base;
+    const dailyChangePct = (dailyChange / base) * 100;
+
+    state.prices[m] = {
+      price: currentPrices[m],
+      change: dailyChange,
+      changePercent: dailyChangePct,
+      high: currentPrices[m] * 1.005,
+      low: currentPrices[m] * 0.995,
+      volume: randInt(10000, 90000)
+    };
+  });
+}
+
+function generateAnalysis(market) {
+  const signals = ['BUY', 'SELL', 'NEUTRAL'];
+  const signal = pick(signals);
+  const price = currentPrices[market];
+  const isBtc = market === 'BTCUSD';
+  const spread = isBtc ? 500 : 2;
+
+  const tp = signal === 'BUY' ? price + rand(spread * 10, spread * 30) : price - rand(spread * 10, spread * 30);
+  const sl = signal === 'BUY' ? price - rand(spread * 5, spread * 15) : price + rand(spread * 5, spread * 15);
+  const confidence = Math.round(rand(55, 92));
+
+  const analyses_text = {
+    BUY: [
+      'يُظهر السوق زخماً صعودياً قوياً مع كسر مستويات المقاومة الرئيسية. مؤشر RSI في منطقة صحية ويدعم الاتجاه الصاعد.',
+      'تتشكل نماذج انعكاس صاعدة على الرسوم البيانية. تقاطع المتوسطات المتحركة يؤكد الاتجاه الإيجابي.',
+      'ضغط شرائي متزايد مع تراجع حجم البيع. مستويات الدعم صامدة وتدعم فرصة الشراء الحالية.'
+    ],
+    SELL: [
+      'يُظهر السوق ضغطاً بيعياً متزايداً مع فشل كسر مستويات المقاومة المهمة. توصية البيع محمية بوقف خسارة واضح.',
+      'تشير المؤشرات الفنية إلى تشبع شرائي ومحتمل للتراجع. الاتجاه الهابط على المدى القصير يبدو قوياً.',
+      'كسر مستوى دعم رئيسي يفتح الطريق لمزيد من الانخفاض. حجم التداول يؤكد الضغط البيعي.'
+    ],
+    NEUTRAL: [
+      'السوق في حالة ترقب وتداول جانبي. انتظار كسر واضح للنطاق الحالي قبل اتخاذ أي قرار تداول.',
+      'تتعارض الإشارات الفنية حالياً. يُنصح بالتريث وانتظار تأكيد واضح للاتجاه.',
+      'مستويات الدعم والمقاومة متقاربة. السوق يحتاج لمحفز إضافي لتحديد الاتجاه القادم.'
+    ]
+  };
+
+  return {
+    signal,
+    confidence,
+    entryPrice: price,
+    takeProfit: tp,
+    stopLoss: sl,
+    rrRatio: Math.abs(tp - price) / Math.abs(sl - price),
+    text: pick(analyses_text[signal]),
+    indicators: {
+      rsi: Math.round(rand(30, 70)),
+      macd: (rand(-2, 2)).toFixed(2),
+      ema20: (price * rand(0.995, 1.005)).toFixed(2),
+      ema50: (price * rand(0.99, 1.01)).toFixed(2),
+      volume: randInt(10000, 90000).toLocaleString()
+    },
+    timestamp: new Date().toISOString()
+  };
+}
+
+function generateTrade(market, analysis) {
+  if (analysis.signal === 'NEUTRAL') return null;
+  if (Math.random() < 0.4) return null;
+
+  return {
+    id: Date.now() + Math.random(),
+    market,
+    direction: analysis.signal,
+    entryPrice: analysis.entryPrice,
+    takeProfit: analysis.takeProfit,
+    stopLoss: analysis.stopLoss,
+    status: 'ACTIVE',
+    openTime: new Date().toISOString(),
+    lots: (rand(0.01, 0.5)).toFixed(2)
+  };
+}
+
+const NEWS_ITEMS = [
+  { title: 'الفيدرالي يُبقي على أسعار الفائدة دون تغيير', body: 'قرر مجلس الاحتياطي الفيدرالي الإبقاء على أسعار الفائدة في نطاق 5.25%-5.50% في اجتماعه الأخير، وسط بيانات اقتصادية متضاربة.', impact: 'high', time: 'منذ 2 ساعة', category: 'اقتصاد كلي' },
+  { title: 'الذهب يصعد وسط مخاوف التضخم', body: 'ارتفع سعر الذهب الفوري في ظل موجة من المخاوف التضخمية وزيادة الطلب على الملاذات الآمنة من قِبل المستثمرين.', impact: 'med', time: 'منذ 4 ساعات', category: 'معادن' },
+  { title: 'البيتكوين يختبر مستويات دعم مهمة', body: 'يُحاول البيتكوين الحفاظ على مستوى الدعم الرئيسي مع تزايد ضغط البيع من المضاربين على المدى القصير.', impact: 'med', time: 'منذ 6 ساعات', category: 'عملات رقمية' },
+  { title: 'بيانات الوظائف الأمريكية أفضل من التوقعات', body: 'جاءت بيانات طلبات إعانة البطالة الأسبوعية أقل من المتوقع، مما يُعزز التوقعات بتأخير خفض الفائدة.', impact: 'high', time: 'منذ 8 ساعات', category: 'اقتصاد كلي' },
+  { title: 'المركزي الأوروبي يُلمح لخفض الفائدة', body: 'صرّح مسؤولون في البنك المركزي الأوروبي بإمكانية خفض أسعار الفائدة في المستقبل القريب إذا استمر تراجع التضخم.', impact: 'high', time: 'أمس', category: 'أوروبا' },
+  { title: 'تحليل: توقعات سعر الذهب للربع القادم', body: 'يرى المحللون أن الذهب قد يستمر في ارتفاعه خلال الربع القادم مدعوماً بالطلب من البنوك المركزية الآسيوية.', impact: 'low', time: 'أمس', category: 'تحليل' },
+];
+
+function generateHistoricalTrades() {
+  const trades = [];
+  const statuses = ['WIN', 'WIN', 'WIN', 'LOSS', 'WIN', 'LOSS'];
+  for (let i = 0; i < 20; i++) {
+    const market = pick(MARKETS);
+    const direction = pick(['BUY', 'SELL']);
+    const base = BASE_PRICES[market];
+    const entry = base * rand(0.98, 1.02);
+    const pips = rand(5, 50);
+    const status = pick(statuses);
+    trades.push({
+      id: i,
+      market,
+      direction,
+      entryPrice: entry,
+      takeProfit: direction === 'BUY' ? entry + pips : entry - pips,
+      stopLoss: direction === 'BUY' ? entry - pips * 0.6 : entry + pips * 0.6,
+      status,
+      openTime: new Date(Date.now() - rand(1, 30) * 86400000).toISOString(),
+      closeTime: new Date(Date.now() - rand(0, 1) * 86400000).toISOString(),
+      pnl: status === 'WIN' ? pips : -pips * 0.6,
+      lots: (rand(0.01, 0.5)).toFixed(2)
+    });
+  }
+  return trades;
+}
+
+function calcStats(trades, market) {
+  const filtered = trades.filter(t => t.market === market && t.status !== 'ACTIVE');
+  const wins = filtered.filter(t => t.status === 'WIN');
+  const losses = filtered.filter(t => t.status === 'LOSS');
+  const totalPnl = filtered.reduce((s, t) => s + (t.pnl || 0), 0);
+  return {
+    total: filtered.length,
+    wins: wins.length,
+    losses: losses.length,
+    winRate: filtered.length ? Math.round((wins.length / filtered.length) * 100) : 0,
+    totalPnl: totalPnl.toFixed(2),
+    avgWin: wins.length ? (wins.reduce((s,t)=>s+(t.pnl||0),0)/wins.length).toFixed(2) : '0',
+    avgLoss: losses.length ? Math.abs(losses.reduce((s,t)=>s+(t.pnl||0),0)/losses.length).toFixed(2) : '0',
+    bestTrade: wins.length ? Math.max(...wins.map(t=>t.pnl||0)).toFixed(2) : '0',
+    worstTrade: losses.length ? Math.abs(Math.min(...losses.map(t=>t.pnl||0))).toFixed(2) : '0'
+  };
+}
+
+function generateDailySummary(market, analysis) {
+  const price = currentPrices[market];
+  return {
+    market,
+    date: new Date().toLocaleDateString('ar-SA'),
+    openPrice: (price * rand(0.997, 1.003)).toFixed(2),
+    currentPrice: price.toFixed(2),
+    high: (price * 1.005).toFixed(2),
+    low: (price * 0.995).toFixed(2),
+    signal: analysis.signal,
+    targets: [
+      { label: 'الهدف الأول', price: (price * 1.003).toFixed(2) },
+      { label: 'الهدف الثاني', price: (price * 1.007).toFixed(2) },
+      { label: 'وقف الخسارة', price: (price * 0.997).toFixed(2) },
+    ],
+    outlook: analysis.text,
+    confidence: analysis.confidence
+  };
+}
+
+// ========================
+// INIT
+// ========================
+updatePrices();
+MARKETS.forEach(m => { state.analyses[m] = generateAnalysis(m); });
+state.allTrades = generateHistoricalTrades();
+
+// ========================
+// TradingView Widgets
+// ========================
+const TV_SYMBOLS = { XAUUSD: 'OANDA:XAUUSD', XAUEUR: 'OANDA:XAUEUR', BTCUSD: 'BITSTAMP:BTCUSD' };
+let tvWidgets = {};
+
+function buildTVWidget(containerId, market, height) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  container.innerHTML = '';
+  const sym = TV_SYMBOLS[market];
+  const div = document.createElement('div');
+  div.id = `tv_${containerId}`;
+  container.appendChild(div);
+  if (window.TradingView) {
+    tvWidgets[containerId] = new TradingView.widget({
+      autosize: true,
+      symbol: sym,
+      interval: '15',
+      timezone: 'Asia/Riyadh',
+      theme: 'dark',
+      style: '1',
+      locale: 'ar',
+      toolbar_bg: '#0d0d0d',
+      enable_publishing: false,
+      hide_side_toolbar: false,
+      allow_symbol_change: false,
+      container_id: `tv_${containerId}`,
+      height: height,
+      withdateranges: true,
+      save_image: false,
+    });
+  } else {
+    container.innerHTML = `<div style="height:${height}px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;color:rgba(255,255,255,0.3);background:#0d0d0d">
+      <div style="font-size:32px">📈</div>
+      <div style="font-size:13px">جارٍ تحميل الشارت...</div>
+      <div style="font-size:11px;color:rgba(255,255,255,0.2)">${sym}</div>
+    </div>`;
+  }
+}
+
+// Load TradingView script
+const tvScript = document.createElement('script');
+tvScript.src = 'https://s3.tradingview.com/tv.js';
+tvScript.onload = () => {
+  buildTVWidget('tvWidget', state.activeMarket, 480);
+  buildTVWidget('tvWidget2', state.activeMarket, 400);
+  buildTVWidget('tvWidget3', state.activeMarket, 350);
+};
+document.head.appendChild(tvScript);
+
+// ========================
+// RENDER FUNCTIONS
+// ========================
+
+function renderHeaderPrices() {
+  const el = document.getElementById('headerPrices');
+  el.innerHTML = MARKETS.map(m => {
+    const p = state.prices[m];
+    if (!p) return '';
+    const pos = p.change >= 0;
+    return `<div class="hp-item">
+      <span class="hp-label">${m}</span>
+      <span class="hp-val">${fmt(m, p.price)}</span>
+      <span class="hp-chg ${pos ? 'up' : 'dn'}">${pos ? '▲' : '▼'} ${Math.abs(p.changePercent).toFixed(3)}%</span>
+    </div>`;
+  }).join('');
+}
+
+function renderPriceTicker() {
+  const el = document.getElementById('priceTicker');
+  el.innerHTML = MARKETS.map(m => {
+    const p = state.prices[m];
+    if (!p) return '';
+    const pos = p.change >= 0;
+    return `<div class="ticker-card ${state.activeMarket === m ? 'active' : ''}" onclick="setMarket('${m}')">
+      <div class="ticker-market">${m}</div>
+      <div class="ticker-price">${fmt(m, p.price)}</div>
+      <div class="ticker-change">
+        <span class="${pos ? 'up' : 'dn'}">${pos ? '▲' : '▼'} ${Math.abs(p.change).toFixed(2)}</span>
+        <span class="${pos ? 'up' : 'dn'}">(${pos ? '+' : ''}${p.changePercent.toFixed(3)}%)</span>
+      </div>
+      <div class="ticker-name">${MARKET_NAMES[m]}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderTabs() {
+  const TABS = [
+    { id: 'dashboard', label: 'الرئيسية', icon: '🏠' },
+    { id: 'analysis', label: 'تحليل AI', icon: '🧠' },
+    { id: 'trades', label: 'الصفقات', icon: '📈' },
+    { id: 'backlog', label: 'السجل', icon: '📁' },
+    { id: 'stats', label: 'إحصائيات', icon: '📊' },
+    { id: 'news', label: 'الأخبار', icon: '📰' },
+    { id: 'summary', label: 'الملخص', icon: '📅' },
+  ];
+  const el = document.getElementById('tabBar');
+  const activeCount = state.activeTrades.filter(t => t.market === state.activeMarket).length;
+  el.innerHTML = TABS.map(t => {
+    const isActive = state.activeTab === t.id;
+    let badge = '';
+    if (t.id === 'trades' && activeCount > 0) badge = `<span class="badge-count">${activeCount}</span>`;
+    return `<button class="tab-btn ${isActive ? 'active' : 'inactive'}" onclick="setTab('${t.id}')">${t.icon} ${t.label}${badge}</button>`;
+  }).join('');
+}
+
+function renderMarketHeader(containerId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  const m = state.activeMarket;
+  const p = state.prices[m];
+  const a = state.analyses[m];
+  if (!p) return;
+  const pos = p.change >= 0;
+  const sigClass = a?.signal === 'BUY' ? 'sig-buy' : a?.signal === 'SELL' ? 'sig-sell' : 'sig-neutral';
+  const sigLabel = a?.signal === 'BUY' ? '🟢 شراء' : a?.signal === 'SELL' ? '🔴 بيع' : '🟡 محايد';
+  el.innerHTML = `
+    <div>
+      <div class="mh-name">${MARKET_NAMES[m]}</div>
+      <div style="font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;color:var(--gold);margin-top:4px">${fmt(m, p.price)}</div>
+      <div style="font-size:12px;margin-top:2px" class="${pos ? 'up' : 'dn'}">${pos ? '+' : ''}${p.change.toFixed(2)} (${p.changePercent.toFixed(3)}%)</div>
+    </div>
+    ${a ? `<div class="mh-signal ${sigClass}">${sigLabel} · ثقة ${a.confidence}%</div>` : ''}
+  `;
+}
+
+function renderAIPanel(containerId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  const a = state.analyses[state.activeMarket];
+  if (!a) { el.innerHTML = '<div class="empty-state">لا يوجد تحليل</div>'; return; }
+  const sigClass = a.signal === 'BUY' ? 'buy' : a.signal === 'SELL' ? 'sell' : 'neutral';
+  const sigLabel = a.signal === 'BUY' ? '🟢 إشارة شراء' : a.signal === 'SELL' ? '🔴 إشارة بيع' : '🟡 محايد — انتظار';
+  const m = state.activeMarket;
+  el.innerHTML = `
+    <div class="glass-card" style="padding:16px">
+      <div class="section-title">🧠 تحليل الذكاء الاصطناعي</div>
+      <div class="ai-signal-big ${sigClass}">${sigLabel}</div>
+      <div class="conf-bar-wrap" style="margin-top:12px">
+        <div class="conf-label"><span>مستوى الثقة</span><span>${a.confidence}%</span></div>
+        <div class="conf-bar"><div class="conf-fill" style="width:${a.confidence}%"></div></div>
+      </div>
+      <div class="levels-grid" style="margin-top:14px">
+        <div class="level-box entry"><div class="level-lbl">سعر الدخول</div><div class="level-val">${fmt(m, a.entryPrice)}</div></div>
+        <div class="level-box rr"><div class="level-lbl">نسبة R:R</div><div class="level-val">1:${a.rrRatio.toFixed(2)}</div></div>
+        <div class="level-box tp"><div class="level-lbl">جني الأرباح</div><div class="level-val">${fmt(m, a.takeProfit)}</div></div>
+        <div class="level-box sl"><div class="level-lbl">وقف الخسارة</div><div class="level-val">${fmt(m, a.stopLoss)}</div></div>
+      </div>
+      <div class="analysis-text" style="margin-top:12px">${a.text}</div>
+      <div style="margin-top:14px">
+        <div class="section-title" style="font-size:12px">المؤشرات الفنية</div>
+        ${[
+          ['RSI (14)', a.indicators.rsi, a.indicators.rsi > 70 ? 'تشبع شرائي' : a.indicators.rsi < 30 ? 'تشبع بيعي' : 'محايد'],
+          ['MACD', a.indicators.macd, parseFloat(a.indicators.macd) > 0 ? 'إيجابي' : 'سلبي'],
+          ['EMA 20', fmt(m, parseFloat(a.indicators.ema20)), ''],
+          ['EMA 50', fmt(m, parseFloat(a.indicators.ema50)), ''],
+          ['الحجم', a.indicators.volume, ''],
+        ].map(([name, val, note]) => `
+          <div class="indicator-row">
+            <span class="ind-name">${name}</span>
+            <span class="ind-val">${val} <span style="font-size:10px;color:var(--text-dim);font-family:Cairo,sans-serif">${note}</span></span>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function renderActiveTrades(containerId) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  const trades = state.activeTrades.filter(t => t.market === state.activeMarket);
+  if (trades.length === 0) {
+    el.innerHTML = `<div class="glass-card"><div class="card-header"><span class="card-title">📈 الصفقات النشطة</span></div><div class="empty-state" style="padding:30px"><div>لا توجد صفقات نشطة حالياً</div></div></div>`;
+    return;
+  }
+  const m = state.activeMarket;
+  el.innerHTML = `<div class="glass-card">
+    <div class="card-header"><span class="card-title">📈 الصفقات النشطة</span><span style="font-size:11px;color:var(--text-dim)">${trades.length} صفقة</span></div>
+    <div class="card-body">
+      ${trades.map(t => {
+        const cp = currentPrices[t.market] || t.entryPrice;
+        const pnl = t.direction === 'BUY' ? cp - t.entryPrice : t.entryPrice - cp;
+        const pct = t.direction === 'BUY'
+          ? Math.min(100, Math.max(0, (cp - t.entryPrice) / (t.takeProfit - t.entryPrice) * 100))
+          : Math.min(100, Math.max(0, (t.entryPrice - cp) / (t.entryPrice - t.takeProfit) * 100));
+        const pnlPos = pnl >= 0;
+        return `<div class="trade-card ${t.direction === 'BUY' ? 'buy-trade' : 'sell-trade'}">
+          <div class="trade-top">
+            <div>
+              <span class="trade-dir ${t.direction === 'BUY' ? 'buy' : 'sell'}">${t.direction === 'BUY' ? '▲ شراء' : '▼ بيع'}</span>
+              <div class="trade-market">${t.market} · ${t.lots} لوت</div>
+            </div>
+            <div class="trade-pnl ${pnlPos ? 'up' : 'dn'}">${pnlPos ? '+' : ''}${pnl.toFixed(2)}</div>
+          </div>
+          <div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${pct > 50 ? 'var(--green)' : 'var(--yellow)'}"></div></div>
+          <div class="trade-levels">
+            <div class="tl-item"><div class="tl-label">دخول</div><div class="tl-val">${fmt(m, t.entryPrice)}</div></div>
+            <div class="tl-item"><div class="tl-label">حالي</div><div class="tl-val" style="color:var(--gold)">${fmt(m, cp)}</div></div>
+            <div class="tl-item"><div class="tl-label">هدف</div><div class="tl-val up">${fmt(m, t.takeProfit)}</div></div>
+            <div class="tl-item"><div class="tl-label">وقف</div><div class="tl-val dn">${fmt(m, t.stopLoss)}</div></div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  </div>`;
+}
+
+function renderBacklog() {
+  const el = document.getElementById('backlogPanel');
+  if (!el) return;
+  const trades = state.allTrades.filter(t => t.status !== 'ACTIVE');
+  el.innerHTML = `<div class="glass-card">
+    <div class="card-header"><span class="card-title">📁 سجل الصفقات</span><span style="font-size:11px;color:var(--text-dim)">${trades.length} صفقة</span></div>
+    <div style="overflow-x:auto">
+      <table class="backlog-table">
+        <thead><tr>
+          <th>السوق</th><th>الاتجاه</th><th>سعر الدخول</th><th>جني الأرباح</th><th>وقف الخسارة</th><th>الربح/الخسارة</th><th>النتيجة</th><th>التاريخ</th>
+        </tr></thead>
+        <tbody>
+          ${trades.map(t => {
+            const statusLabel = t.status === 'WIN' ? 'ربح' : 'خسارة';
+            const statusClass = t.status === 'WIN' ? 'status-win' : 'status-loss';
+            const pnlPos = (t.pnl || 0) >= 0;
+            return `<tr>
+              <td style="font-weight:700">${t.market}</td>
+              <td class="${t.direction === 'BUY' ? 'up' : 'dn'}">${t.direction === 'BUY' ? '▲ شراء' : '▼ بيع'}</td>
+              <td class="mono">${fmt(t.market, t.entryPrice)}</td>
+              <td class="mono up">${fmt(t.market, t.takeProfit)}</td>
+              <td class="mono dn">${fmt(t.market, t.stopLoss)}</td>
+              <td class="mono ${pnlPos ? 'up' : 'dn'}">${pnlPos ? '+' : ''}${(t.pnl || 0).toFixed(2)}</td>
+              <td class="${statusClass}">${statusLabel}</td>
+              <td style="color:var(--text-dim);font-size:11px">${new Date(t.openTime).toLocaleDateString('ar-SA')}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>`;
+}
+
+function renderStats() {
+  const el = document.getElementById('statsPanel');
+  if (!el) return;
+  const s = calcStats(state.allTrades, state.activeMarket);
+  el.innerHTML = `
+    <div class="section-title">📊 إحصائيات ${state.activeMarket}</div>
+    <div class="stats-grid">
+      <div class="stat-card"><div class="stat-val">${s.total}</div><div class="stat-lbl">إجمالي الصفقات</div></div>
+      <div class="stat-card"><div class="stat-val" style="color:var(--green)">${s.wins}</div><div class="stat-lbl">صفقات رابحة</div></div>
+      <div class="stat-card"><div class="stat-val" style="color:var(--red)">${s.losses}</div><div class="stat-lbl">صفقات خاسرة</div></div>
+      <div class="stat-card"><div class="stat-val">${s.winRate}%</div><div class="stat-lbl">نسبة النجاح</div></div>
+      <div class="stat-card"><div class="stat-val ${parseFloat(s.totalPnl)>=0?'up':'dn'}">${parseFloat(s.totalPnl)>=0?'+':''}${s.totalPnl}</div><div class="stat-lbl">إجمالي الربح/الخسارة</div></div>
+      <div class="stat-card"><div class="stat-val up">+${s.avgWin}</div><div class="stat-lbl">متوسط الربح</div></div>
+      <div class="stat-card"><div class="stat-val dn">-${s.avgLoss}</div><div class="stat-lbl">متوسط الخسارة</div></div>
+      <div class="stat-card"><div class="stat-val up">+${s.bestTrade}</div><div class="stat-lbl">أفضل صفقة</div></div>
+    </div>
+
+    <div class="glass-card" style="padding:16px;margin-top:16px">
+      <div class="section-title">توزيع النتائج</div>
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+        <div style="flex:1">
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-dim);margin-bottom:6px"><span>رابحة</span><span>${s.wins}</span></div>
+          <div class="conf-bar"><div class="conf-fill" style="width:${s.winRate}%;background:var(--green)"></div></div>
+        </div>
+        <div style="flex:1">
+          <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-dim);margin-bottom:6px"><span>خاسرة</span><span>${s.losses}</span></div>
+          <div class="conf-bar"><div class="conf-fill" style="width:${100-s.winRate}%;background:var(--red)"></div></div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderNews() {
+  const el = document.getElementById('newsPanel');
+  if (!el) return;
+  el.innerHTML = `<div class="section-title">📰 الأخبار والتحليلات</div>
+    ${NEWS_ITEMS.map(n => {
+      const impClass = n.impact === 'high' ? 'impact-high' : n.impact === 'med' ? 'impact-med' : 'impact-low';
+      const impLabel = n.impact === 'high' ? 'تأثير عالي' : n.impact === 'med' ? 'تأثير متوسط' : 'تأثير منخفض';
+      return `<div class="news-card">
+        <div class="news-meta">
+          <span class="news-impact ${impClass}">${impLabel}</span>
+          <span class="news-time">${n.time}</span>
+        </div>
+        <div class="news-title">${n.title}</div>
+        <div class="news-body">${n.body}</div>
+        <div style="font-size:11px;color:var(--text-dim);margin-top:8px">🏷️ ${n.category}</div>
+      </div>`;
+    }).join('')}
+  `;
+}
+
+function renderSummary() {
+  const el = document.getElementById('summaryPanel');
+  if (!el) return;
+  const a = state.analyses[state.activeMarket];
+  if (!a) return;
+  const s = generateDailySummary(state.activeMarket, a);
+  const sigLabel = s.signal === 'BUY' ? '🟢 شراء' : s.signal === 'SELL' ? '🔴 بيع' : '🟡 محايد';
+  el.innerHTML = `
+    <div class="section-title">📅 الملخص اليومي — ${MARKET_NAMES[state.activeMarket]}</div>
+    <div class="glass-card" style="padding:16px;margin-bottom:14px">
+      <div class="summary-section">
+        <h4>بيانات اليوم</h4>
+        ${[
+          ['التاريخ', s.date],
+          ['سعر الافتتاح', s.openPrice],
+          ['السعر الحالي', s.currentPrice],
+          ['أعلى سعر', s.high],
+          ['أدنى سعر', s.low],
+          ['الإشارة', sigLabel],
+          ['مستوى الثقة', `${s.confidence}%`],
+        ].map(([k,v]) => `<div class="summary-key-val"><span class="summary-key">${k}</span><span class="summary-val">${v}</span></div>`).join('')}
+      </div>
+    </div>
+    <div class="glass-card" style="padding:16px;margin-bottom:14px">
+      <div class="section-title" style="font-size:13px">المستويات المستهدفة</div>
+      ${s.targets.map(t => `<div class="summary-key-val"><span class="summary-key">${t.label}</span><span class="summary-val" style="color:${t.label.includes('وقف') ? 'var(--red)' : 'var(--green)'}">${t.price}</span></div>`).join('')}
+    </div>
+    <div class="glass-card" style="padding:16px">
+      <div class="section-title" style="font-size:13px">التوقعات والتحليل</div>
+      <div class="analysis-text">${s.outlook}</div>
+    </div>
+  `;
+}
+
+function renderBreadcrumb() {
+  const allActive = state.activeTrades.length;
+  const marketActive = state.activeTrades.filter(t => t.market === state.activeMarket).length;
+  document.getElementById('allActiveCount').textContent = allActive;
+  document.getElementById('marketActiveCount').textContent = marketActive;
+  document.getElementById('activeMarketLabel').textContent = state.activeMarket;
+  document.getElementById('marketFullName').textContent = MARKET_NAMES[state.activeMarket];
+}
+
+function renderChartBar() {
+  const p = state.prices[state.activeMarket];
+  if (!p) return;
+  const pos = p.change >= 0;
+  document.getElementById('chartPrice').textContent = fmt(state.activeMarket, p.price);
+  document.getElementById('chartChange').textContent = `${pos ? '+' : ''}${p.change.toFixed(2)}`;
+  document.getElementById('chartChange').className = `mono ${pos ? 'up' : 'dn'}`;
+  document.getElementById('chartLabel').textContent = `${state.activeMarket} — الشارت المباشر (TradingView)`;
+}
+
+function renderAll() {
+  renderHeaderPrices();
+  renderPriceTicker();
+  renderTabs();
+  renderBreadcrumb();
+  renderChartBar();
+  renderMarketHeader('mh-dashboard');
+  renderMarketHeader('mh-analysis');
+  renderMarketHeader('mh-trades');
+  renderAIPanel('aiPanelDashboard');
+  renderAIPanel('aiPanelAnalysis');
+  renderActiveTrades('activeTradesDashboard');
+  renderActiveTrades('activeTradesTrades');
+  renderBacklog();
+  renderStats();
+  renderNews();
+  renderSummary();
+}
+
+// ========================
+// INTERACTIONS
+// ========================
+function setMarket(m) {
+  state.activeMarket = m;
+  renderAll();
+  // Rebuild charts for new market
+  buildTVWidget('tvWidget', m, 480);
+  buildTVWidget('tvWidget2', m, 400);
+  buildTVWidget('tvWidget3', m, 350);
+}
+
+function setTab(tab) {
+  state.activeTab = tab;
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.getElementById(`tab-${tab}`)?.classList.add('active');
+  renderTabs();
+}
+
+// ========================
+// NOTIFICATIONS
+// ========================
+function addNotification(msg, type) {
+  const id = Date.now().toString();
+  const el = document.createElement('div');
+  el.className = `notif ${type}`;
+  el.textContent = msg;
+  el.onclick = () => el.remove();
+  document.getElementById('notifications').prepend(el);
+  setTimeout(() => el.remove(), 5000);
+}
+
+// ========================
+// LOOPS
+// ========================
+
+// Price update every 2s
+setInterval(() => {
+  updatePrices();
+
+  // Check active trades
+  const toClose = [];
+  state.activeTrades = state.activeTrades.filter(trade => {
+    const cp = currentPrices[trade.market];
+    let newStatus = 'ACTIVE';
+    if (trade.direction === 'BUY') {
+      if (cp >= trade.takeProfit) newStatus = 'WIN';
+      else if (cp <= trade.stopLoss) newStatus = 'LOSS';
+    } else {
+      if (cp <= trade.takeProfit) newStatus = 'WIN';
+      else if (cp >= trade.stopLoss) newStatus = 'LOSS';
+    }
+    if (newStatus !== 'ACTIVE') {
+      const pnl = newStatus === 'WIN'
+        ? Math.abs(trade.takeProfit - trade.entryPrice)
+        : -Math.abs(trade.entryPrice - trade.stopLoss);
+      toClose.push({ ...trade, status: newStatus, closeTime: new Date().toISOString(), pnl });
+      addNotification(
+        `${trade.market} ${trade.direction === 'BUY' ? 'شراء' : 'بيع'} — ${newStatus === 'WIN' ? '✅ هدف محقق' : '❌ وقف ضُرب'}`,
+        newStatus === 'WIN' ? 'win' : 'loss'
+      );
+      return false;
+    }
+    return true;
+  });
+  if (toClose.length) state.allTrades = [...toClose, ...state.allTrades];
+
+  renderHeaderPrices();
+  renderPriceTicker();
+  renderBreadcrumb();
+  renderChartBar();
+  renderActiveTrades('activeTradesDashboard');
+  renderActiveTrades('activeTradesTrades');
+  renderTabs();
+}, 2000);
+
+// AI analysis every 15s
+setInterval(() => {
+  MARKETS.forEach(m => { state.analyses[m] = generateAnalysis(m); });
+
+  // Try to generate new trades
+  MARKETS.forEach(m => {
+    const now = Date.now();
+    const last = state.lastTradeTime[m] || 0;
+    if (now - last < 30000) return;
+    const a = state.analyses[m];
+    if (!a) return;
+    const newTrade = generateTrade(m, a);
+    if (!newTrade) return;
+    if (state.activeTrades.some(t => t.market === m)) return;
+    state.activeTrades.push(newTrade);
+    state.lastTradeTime[m] = now;
+    addNotification(
+      `🎯 صفقة ${newTrade.direction === 'BUY' ? 'شراء' : 'بيع'} جديدة — ${m}`,
+      newTrade.direction === 'BUY' ? 'buy' : 'sell'
+    );
+  });
+
+  renderAIPanel('aiPanelDashboard');
+  renderAIPanel('aiPanelAnalysis');
+  renderMarketHeader('mh-dashboard');
+  renderMarketHeader('mh-analysis');
+  renderMarketHeader('mh-trades');
+  renderStats();
+  renderSummary();
+  renderBacklog();
+  renderTabs();
+}, 15000);
+
+// ========================
+// INITIAL RENDER
+// ========================
+renderAll();
+</script>
+
+</body>
+</html>
